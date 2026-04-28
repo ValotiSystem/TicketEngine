@@ -74,19 +74,19 @@ on purpose.
 
 High-level component view:
 
-![Architecture](docs/screenshots/architecture.png)
+![Architecture](https://www.plantuml.com/plantuml/proxy?cache=no&fmt=svg&src=https://raw.githubusercontent.com/ValotiSystem/TicketEngine/main/docs/architecture.puml)
 
-> Source: [`docs/architecture.puml`](docs/architecture.puml). Render with any PlantUML viewer.
+> Source: [`docs/architecture.puml`](docs/architecture.puml). Rendered live by the public PlantUML proxy (requires the repo to be public).
 
 Data model:
 
-![Data model](docs/screenshots/data-model.png)
+![Data model](https://www.plantuml.com/plantuml/proxy?cache=no&fmt=svg&src=https://raw.githubusercontent.com/ValotiSystem/TicketEngine/main/docs/data-model.puml)
 
 > Source: [`docs/data-model.puml`](docs/data-model.puml).
 
 Ticket lifecycle:
 
-![State machine](docs/screenshots/state-machine.png)
+![State machine](https://www.plantuml.com/plantuml/proxy?cache=no&fmt=svg&src=https://raw.githubusercontent.com/ValotiSystem/TicketEngine/main/docs/state-machine.puml)
 
 > Source: [`docs/state-machine.puml`](docs/state-machine.puml).
 
@@ -94,19 +94,8 @@ Ticket lifecycle:
 
 ## Screenshots
 
-> Drop PNGs into `docs/screenshots/` to make these render on GitHub.
-
-### Login
-![Login](docs/screenshots/login.png)
-
-### Ticket list
-![Ticket list](docs/screenshots/tickets.png)
-
-### Ticket detail with state transitions and comments
-![Ticket detail](docs/screenshots/ticket-detail.png)
-
-### New ticket form
-![New ticket](docs/screenshots/new-ticket.png)
+> _UI screenshots will be added once the visual layer is finalized._
+> Drop PNGs into [`docs/screenshots/`](docs/screenshots/) and reference them here when ready.
 
 ---
 

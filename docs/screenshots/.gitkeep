@@ -1,8 +1,5 @@
-# Drop screenshots here:
-#   architecture.png
-#   data-model.png
-#   state-machine.png
-#   login.png
-#   tickets.png
-#   ticket-detail.png
-#   new-ticket.png
+# Drop UI screenshots here when ready (login.png, tickets.png,
+# ticket-detail.png, new-ticket.png) and reference them in README.md.
+#
+# Architecture / data-model / state-machine diagrams are rendered live
+# from the .puml sources via the PlantUML public proxy — no PNG needed.
