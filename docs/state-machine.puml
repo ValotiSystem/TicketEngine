@@ -1,0 +1,49 @@
+@startuml state-machine
+!theme plain
+title TicketPortal — Ticket state machine
+
+[*] --> draft
+draft --> open : submit
+
+open --> triage : take from queue
+open --> cancelled : cancel (perm)
+
+triage --> in_progress : assign + start
+triage --> waiting_on_requester : need info
+triage --> resolved : duplicate / already fixed\n(added vs the spec)
+triage --> cancelled : cancel (perm)
+
+in_progress --> waiting_on_requester : need info
+in_progress --> waiting_on_third_party : external dep
+in_progress --> resolved : fix delivered
+
+waiting_on_requester --> in_progress : info received
+waiting_on_requester --> cancelled : timeout / cancel
+' CRITIQUE: the spec allowed waiting -> reopened. Removed: reopened only
+' makes sense from resolved/closed.
+
+waiting_on_third_party --> in_progress : external reply
+waiting_on_third_party --> cancelled : cancel
+
+resolved --> closed : confirmed or timeout
+resolved --> reopened : requester unsatisfied
+
+closed --> reopened : only with ticket.reopen_closed permission
+
+reopened --> in_progress
+reopened --> triage
+
+cancelled --> [*]
+closed --> [*]
+
+note right of cancelled
+  Terminal.
+  The spec said "unless explicit policy":
+  not allowed by default here.
+end note
+
+note right of resolved
+  Requires a mandatory resolution_reason.
+  See workflow.py
+end note
+@enduml

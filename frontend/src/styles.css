@@ -1,0 +1,97 @@
+/* CRITIQUE: minimal CSS for the scaffold. For a real product adopt a
+   design system (Tailwind, MUI, Mantine, ...). The scaffold does not
+   want to force the choice. */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f5f6f8;
+  color: #1a1a1a;
+}
+
+a { color: #2b6cb0; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 56px 1fr;
+}
+.topbar {
+  background: #1f2937;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+}
+.topbar a { color: #d1d5db; }
+.topbar .brand { font-weight: bold; color: white; }
+.main { padding: 24px; max-width: 1200px; width: 100%; margin: 0 auto; }
+
+table { width: 100%; border-collapse: collapse; background: white; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+th { background: #f3f4f6; font-weight: 600; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-status-open { background: #dbeafe; color: #1e40af; }
+.badge-status-triage { background: #fde68a; color: #92400e; }
+.badge-status-in_progress { background: #c7d2fe; color: #3730a3; }
+.badge-status-waiting_on_requester { background: #fed7aa; color: #9a3412; }
+.badge-status-waiting_on_third_party { background: #fcd34d; color: #92400e; }
+.badge-status-resolved { background: #bbf7d0; color: #166534; }
+.badge-status-closed { background: #e5e7eb; color: #374151; }
+.badge-status-reopened { background: #fecaca; color: #991b1b; }
+.badge-status-cancelled { background: #f3f4f6; color: #6b7280; }
+.badge-status-draft { background: #f3f4f6; color: #6b7280; }
+
+.badge-priority-low { background: #e5e7eb; color: #374151; }
+.badge-priority-normal { background: #dbeafe; color: #1e40af; }
+.badge-priority-high { background: #fed7aa; color: #9a3412; }
+.badge-priority-urgent { background: #fecaca; color: #991b1b; }
+
+.btn {
+  background: #2b6cb0;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn:hover { background: #2c5282; }
+.btn-secondary { background: #6b7280; }
+.btn-danger { background: #dc2626; }
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  margin-bottom: 16px;
+}
+
+.input, .textarea, .select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.textarea { min-height: 100px; resize: vertical; }
+
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #374151; }
+
+.error { background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; }
+
+.comment { padding: 12px; border-left: 3px solid #2b6cb0; margin-bottom: 8px; background: #f9fafb; }
+.comment.internal { border-left-color: #d97706; background: #fffbeb; }
+.comment .meta { font-size: 12px; color: #6b7280; margin-bottom: 4px; }

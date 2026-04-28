@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ticketportal
+      POSTGRES_PASSWORD: ticketportal
+      POSTGRES_DB: ticketportal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # CRITIQUE: in production the backend MUST NOT be launched with `flask run`.
+  # Use gunicorn (e.g. gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app).
+  # Kept dev-friendly here on purpose.
+  backend:
+    build: ./backend
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql+psycopg://ticketportal:ticketportal@postgres:5432/ticketportal
+      REDIS_URL: redis://redis:6379/0
+      FLASK_ENV: development
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+
+  worker:
+    build: ./backend
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql+psycopg://ticketportal:ticketportal@postgres:5432/ticketportal
+      REDIS_URL: redis://redis:6379/0
+    command: celery -A app.tasks worker --loglevel=info
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:

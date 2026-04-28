@@ -1,0 +1,100 @@
+@startuml architecture
+!theme plain
+title TicketPortal — Logical architecture
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor Requester
+actor Agent
+actor Admin
+
+package "Presentation" {
+  [React SPA\n(Vite + TS)] as SPA
+}
+
+package "API Layer (Flask)" {
+  [Auth Module] as AUTH
+  [Tickets Module] as TKT
+  [Users Module] as USR
+  [Audit Module] as AUD
+  [Admin Module] as ADM
+}
+
+package "Domain Layer" {
+  [Workflow / State Machine] as WF
+  [Permission Engine (RBAC + tenant policy)] as RBAC
+  [SLA Engine] as SLA
+  [Audit Service] as AUDS
+}
+
+package "Persistence" {
+  database "PostgreSQL\n(tenant_id everywhere)" as PG
+}
+
+package "Async (Celery + Redis)" {
+  queue "Redis broker" as RQ
+  [Notification Worker] as NW
+  [SLA Scheduler] as SLAW
+  [Indexing / Webhook Worker] as IDXW
+}
+
+package "Storage" {
+  [Object Storage\n(S3-compatible)] as S3
+}
+
+package "Integrations" {
+  [SMTP] as SMTP
+  [External webhooks] as WH
+  [SSO (future)] as SSO
+}
+
+Requester --> SPA
+Agent --> SPA
+Admin --> SPA
+
+SPA --> AUTH : /api/v1/auth/*
+SPA --> TKT  : /api/v1/tickets/*
+SPA --> USR  : /api/v1/users/*
+SPA --> AUD  : /api/v1/audit-events
+SPA --> ADM  : /api/v1/{roles,queues,sla-policies}
+
+AUTH --> RBAC
+TKT --> WF
+TKT --> RBAC
+TKT --> AUDS
+TKT --> SLA
+
+WF --> PG
+RBAC --> PG
+SLA --> PG
+AUDS --> PG
+
+TKT --> RQ : enqueue notify/index
+AUTH --> RQ
+SLAW --> PG
+NW <-- RQ
+IDXW <-- RQ
+
+NW --> SMTP
+NW --> WH
+TKT --> S3 : upload attachments (signed)
+SPA --> S3 : download (signed URL)
+
+AUTH ..> SSO : (Phase 3)
+
+note right of WF
+  Statuses: draft, open, triage,
+  in_progress, waiting_*,
+  resolved, closed, reopened, cancelled.
+  Strict transitions, no skipping.
+end note
+
+note right of NW
+  Outbox pattern recommended:
+  event written to an outbox table
+  in the same tx as the ticket,
+  then a worker drains the table.
+end note
+
+@enduml

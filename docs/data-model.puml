@@ -1,0 +1,183 @@
+@startuml data-model
+!theme plain
+title TicketPortal — Data model (essential, not exhaustive)
+
+hide circle
+skinparam linetype ortho
+
+entity Tenant {
+  * id : UUID
+  --
+  name
+  slug
+  created_at
+}
+
+entity User {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  email
+  password_hash
+  full_name
+  is_active
+  is_platform_admin
+}
+
+entity Role {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  name
+}
+
+entity Permission {
+  * id : UUID
+  --
+  code   ' ticket.create, ticket.assign, ...
+}
+
+entity RolePermission {
+  * role_id : UUID
+  * permission_id : UUID
+}
+
+entity UserRole {
+  * user_id : UUID
+  * role_id : UUID
+}
+
+entity Queue {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  name
+}
+
+entity TicketCategory {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  name
+  parent_id
+}
+
+entity SLAPolicy {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  name
+  first_response_minutes
+  resolve_minutes
+}
+
+entity Ticket {
+  * id : UUID
+  --
+  * tenant_id : UUID
+  number
+  title
+  description
+  status
+  priority
+  category_id
+  requester_id
+  assignee_id
+  queue_id
+  source
+  visibility
+  custom_fields : JSONB
+  created_at
+  updated_at
+  resolved_at
+  closed_at
+  due_at
+  sla_breach_at
+  last_public_reply_at
+  last_internal_update_at
+}
+
+entity Comment {
+  * id : UUID
+  --
+  * ticket_id
+  * author_id
+  body
+  is_internal : bool
+  created_at
+}
+
+entity Attachment {
+  * id : UUID
+  --
+  * ticket_id
+  uploader_id
+  filename
+  mime
+  size_bytes
+  storage_key
+  scan_status
+  created_at
+}
+
+entity AuditEvent {
+  * id : UUID
+  --
+  * tenant_id
+  actor_id
+  ticket_id
+  event_type
+  payload : JSONB
+  created_at
+}
+
+entity Tag {
+  * id : UUID
+  --
+  * tenant_id
+  name
+}
+
+entity TicketTag {
+  * ticket_id
+  * tag_id
+}
+
+Tenant ||--o{ User
+Tenant ||--o{ Role
+Tenant ||--o{ Queue
+Tenant ||--o{ TicketCategory
+Tenant ||--o{ SLAPolicy
+Tenant ||--o{ Ticket
+Tenant ||--o{ AuditEvent
+Tenant ||--o{ Tag
+
+User ||--o{ UserRole
+Role ||--o{ UserRole
+Role ||--o{ RolePermission
+Permission ||--o{ RolePermission
+
+User ||--o{ Ticket : "requester"
+User ||--o{ Ticket : "assignee"
+Queue ||--o{ Ticket
+TicketCategory ||--o{ Ticket
+SLAPolicy ||--o{ Ticket
+
+Ticket ||--o{ Comment
+Ticket ||--o{ Attachment
+Ticket ||--o{ AuditEvent
+Ticket ||--o{ TicketTag
+Tag ||--o{ TicketTag
+
+note right of Ticket
+  Recommended indexes:
+  (tenant_id, status)
+  (tenant_id, assignee_id)
+  (tenant_id, queue_id)
+  (tenant_id, requester_id)
+  (tenant_id, due_at)
+  (tenant_id, created_at)
+  unique (tenant_id, number)
+end note
+
+@enduml
