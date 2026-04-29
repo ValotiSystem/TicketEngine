@@ -10,6 +10,7 @@ import { authApi } from "../api/auth";
 export function Layout() {
   const me = useAuthStore((s) => s.me);
   const clear = useAuthStore((s) => s.clear);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
   const nav = useNavigate();
 
   /**
@@ -33,6 +34,7 @@ export function Layout() {
         <Link to="/" className="brand">TicketPortal</Link>
         <Link to="/tickets">Tickets</Link>
         <Link to="/tickets/new">New</Link>
+        {hasPermission("admin.config") && <Link to="/admin">Admin</Link>}
         <span style={{ marginLeft: "auto" }}>{me?.email}</span>
         <button className="btn btn-secondary" onClick={logout}>Sign out</button>
       </header>

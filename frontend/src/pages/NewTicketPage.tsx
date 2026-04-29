@@ -1,11 +1,15 @@
 /**
  * summary:
- *   New ticket form page. On success redirects to the ticket detail
- *   view.
+ *   New ticket form page. Loads the tenant's active custom field
+ *   definitions and renders them dynamically. On success redirects to
+ *   the ticket detail view.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { ticketsApi } from "../api/tickets";
+import { ticketCustomFields } from "../api/admin";
+import { CustomFieldsForm } from "../features/tickets/CustomFieldsForm";
 import type { TicketPriority } from "../api/types";
 import { ApiException } from "../api/client";
 
@@ -13,9 +17,15 @@ export function NewTicketPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TicketPriority>("normal");
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+
+  const { data: defs = [] } = useQuery({
+    queryKey: ["tickets", "custom-fields"],
+    queryFn: ticketCustomFields,
+  });
 
   /**
    * summary:
@@ -30,7 +40,7 @@ export function NewTicketPage() {
     setError(null);
     setLoading(true);
     try {
-      const t = await ticketsApi.create({ title, description, priority });
+      const t = await ticketsApi.create({ title, description, priority, custom_fields: customValues });
       nav(`/tickets/${t.id}`);
     } catch (e) {
       setError(e instanceof ApiException ? e.payload.message : "Error");
@@ -40,31 +50,36 @@ export function NewTicketPage() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 720 }}>
-      <h2 style={{ marginTop: 0 }}>New ticket</h2>
-      <form onSubmit={submit}>
-        {error && <div className="error">{error}</div>}
-        <div className="field">
-          <label>Title</label>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} required />
-        </div>
-        <div className="field">
-          <label>Description</label>
-          <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} required />
-        </div>
-        <div className="field" style={{ maxWidth: 200 }}>
-          <label>Priority</label>
-          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)}>
-            <option value="low">Low</option>
-            <option value="normal">Normal</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </div>
-        <button className="btn" disabled={loading} type="submit">
-          {loading ? "Creating..." : "Create ticket"}
-        </button>
-      </form>
+    <div style={{ maxWidth: 720 }}>
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>New ticket</h2>
+        <form onSubmit={submit}>
+          {error && <div className="error">{error}</div>}
+          <div className="field">
+            <label>Title</label>
+            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>Description</label>
+            <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} required />
+          </div>
+          <div className="field" style={{ maxWidth: 200 }}>
+            <label>Priority</label>
+            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)}>
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+
+          <CustomFieldsForm defs={defs} values={customValues} onChange={setCustomValues} />
+
+          <button className="btn" disabled={loading} type="submit">
+            {loading ? "Creating..." : "Create ticket"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

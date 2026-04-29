@@ -67,12 +67,17 @@ export const ticketsApi = {
    * summary:
    *   Create a new ticket.
    * args:
-   *   payload: title, description, optional priority.
+   *   payload: title, description, optional priority, optional
+   *     custom_fields keyed by definition.key.
    * return:
    *   Promise resolving to the created Ticket.
    */
-  create: (payload: { title: string; description: string; priority?: TicketPriority }) =>
-    api<Ticket>("/tickets", { method: "POST", body: payload }),
+  create: (payload: {
+    title: string;
+    description: string;
+    priority?: TicketPriority;
+    custom_fields?: Record<string, unknown>;
+  }) => api<Ticket>("/tickets", { method: "POST", body: payload }),
 
   /**
    * summary:

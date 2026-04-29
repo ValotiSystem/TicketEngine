@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ticketsApi } from "../api/tickets";
+import { ticketCustomFields } from "../api/admin";
 import { useAuthStore } from "../store/auth";
 import { StatusBadge } from "../features/tickets/StatusBadge";
 import { PriorityBadge } from "../features/tickets/PriorityBadge";
@@ -28,6 +29,11 @@ export function TicketDetailPage() {
     queryKey: ["ticket", id, "comments"],
     queryFn: () => ticketsApi.comments(id),
     enabled: !!ticket,
+  });
+
+  const { data: defs = [] } = useQuery({
+    queryKey: ["tickets", "custom-fields"],
+    queryFn: ticketCustomFields,
   });
 
   const [body, setBody] = useState("");
@@ -66,6 +72,21 @@ export function TicketDetailPage() {
    * return:
    *   void.
    */
+  /**
+   * summary:
+   *   Stringify a custom field value for read-only display.
+   * args:
+   *   v: raw value from ticket.custom_fields.
+   * return:
+   *   String representation suitable for direct rendering.
+   */
+  function formatValue(v: unknown): string {
+    if (v === null || v === undefined || v === "") return "—";
+    if (Array.isArray(v)) return v.join(", ");
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    return String(v);
+  }
+
   function doTransition(to: TicketStatus) {
     let reason: string | undefined;
     if (reasonRequired(to)) {
@@ -89,6 +110,20 @@ export function TicketDetailPage() {
           Created {new Date(ticket.created_at).toLocaleString()}
           {ticket.resolved_at && ` · Resolved ${new Date(ticket.resolved_at).toLocaleString()}`}
         </div>
+
+        {defs.length > 0 && (
+          <div style={{ marginTop: 16, borderTop: "1px solid #e5e7eb", paddingTop: 12 }}>
+            <strong style={{ fontSize: 13, color: "#374151" }}>Additional fields</strong>
+            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 6, marginTop: 8, fontSize: 14 }}>
+              {defs.map((d) => (
+                <>
+                  <div key={`${d.id}-l`} style={{ color: "#6b7280" }}>{d.label}</div>
+                  <div key={`${d.id}-v`}>{formatValue(ticket.custom_fields?.[d.key])}</div>
+                </>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {actionError && <div className="error">{actionError}</div>}

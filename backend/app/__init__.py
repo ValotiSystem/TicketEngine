@@ -10,7 +10,7 @@ import uuid
 from flask import Flask, g, request
 
 from .config import get_config
-from .extensions import db, migrate, jwt, cors
+from .extensions import db, migrate, jwt, cors, init_redis
 
 
 def create_app(config_object: str | None = None) -> Flask:
@@ -32,6 +32,7 @@ def create_app(config_object: str | None = None) -> Flask:
     _register_blueprints(app)
     _register_error_handlers(app)
     _register_cli(app)
+    _install_observability(app)
 
     return app
 
@@ -39,8 +40,8 @@ def create_app(config_object: str | None = None) -> Flask:
 def _init_extensions(app: Flask) -> None:
     """
     summary:
-        Initialize Flask extensions and import all model modules so
-        Alembic autogenerate can see them.
+        Initialize Flask extensions, the optional Redis client and
+        import all model modules so Alembic autogenerate sees them.
     args:
         app: Flask application.
     return:
@@ -54,10 +55,8 @@ def _init_extensions(app: Flask) -> None:
         resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}},
         supports_credentials=False,
     )
+    init_redis(app)
 
-    # Import models here to make sure Alembic sees every table at
-    # `flask db migrate`. Nothing magical in SQLAlchemy: if the module
-    # is not imported, the table does not exist for the metadata.
     from . import models  # noqa: F401
 
 
@@ -70,8 +69,8 @@ def _init_logging(app: Flask) -> None:
     return:
         None.
     """
-    # CRITIQUE: in prod use structured logging (JSON) to stdout and let an
-    # external agent collect it. Kept basic here.
+    # CRITIQUE: in prod use structured logging (JSON) to stdout and let
+    # an external agent collect it. Kept basic here.
     logging.basicConfig(
         level=logging.INFO if not app.debug else logging.DEBUG,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -112,11 +111,13 @@ def _register_blueprints(app: Flask) -> None:
     from .tickets.routes import bp as tickets_bp
     from .users.routes import bp as users_bp
     from .audit.routes import bp as audit_bp
+    from .admin.routes import bp as admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(tickets_bp, url_prefix="/api/v1/tickets")
     app.register_blueprint(users_bp, url_prefix="/api/v1/users")
     app.register_blueprint(audit_bp, url_prefix="/api/v1/audit-events")
+    app.register_blueprint(admin_bp, url_prefix="/api/v1/admin")
 
 
 def _register_error_handlers(app: Flask) -> None:
@@ -143,3 +144,16 @@ def _register_cli(app: Flask) -> None:
     """
     from .cli import register_cli
     register_cli(app)
+
+
+def _install_observability(app: Flask) -> None:
+    """
+    summary:
+        Install Prometheus /metrics endpoint and per-request hooks.
+    args:
+        app: Flask application.
+    return:
+        None.
+    """
+    from .observability.metrics import install
+    install(app)

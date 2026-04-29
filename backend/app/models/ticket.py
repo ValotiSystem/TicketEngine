@@ -12,6 +12,11 @@ summary:
     - `custom_fields` is JSON. Simple filters via JSON path; for complex
       queries see the CRITIQUE below.
     - `tenant_id` is indexed and is part of every relevant compound index.
+    - `search_vector` is a tsvector column populated by
+      services.ticket_service when title/description change. With a GIN
+      index it serves Postgres full-text search at sub-millisecond per
+      query for hundreds of millions of rows. Falls back to ILIKE when
+      not on Postgres (sqlite dev).
 """
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ from sqlalchemy import (
     Column, String, Text, DateTime, ForeignKey, Integer, Index, UniqueConstraint,
     JSON,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 
 from ..extensions import db
 from .base import UUIDPk, Timestamps, tenant_id_column
@@ -62,7 +68,11 @@ class Ticket(UUIDPk, Timestamps, db.Model):
         Index("ix_ticket_tenant_queue", "tenant_id", "queue_id"),
         Index("ix_ticket_tenant_requester", "tenant_id", "requester_id"),
         Index("ix_ticket_tenant_due", "tenant_id", "due_at"),
-        Index("ix_ticket_tenant_created", "tenant_id", "created_at"),
+        # Compound index used by keyset pagination (created_at, id).
+        Index("ix_ticket_tenant_created_id", "tenant_id", "created_at", "id"),
+        # GIN index on tsvector. Created only on Postgres via Alembic
+        # migration: SQLAlchemy DDL with postgresql_using='gin'.
+        Index("ix_ticket_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     tenant_id = tenant_id_column()
@@ -97,3 +107,8 @@ class Ticket(UUIDPk, Timestamps, db.Model):
     last_internal_update_at = Column(DateTime(timezone=True))
 
     resolution_reason = Column(Text)  # mandatory when status -> resolved
+
+    # Materialized full-text search vector. Populated by the service
+    # layer on title/description changes. On Postgres this column is
+    # TSVECTOR; on SQLite the dialect falls back to TEXT (no FTS).
+    search_vector = Column(TSVECTOR)

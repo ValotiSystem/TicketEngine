@@ -9,17 +9,38 @@ from sqlalchemy import select
 
 from ..common.decorators import auth_required, permission_required
 from ..common.responses import ok, paginated
+from ..common.rate_limit import rate_limit
+from ..common.idempotency import idempotent
 from ..schemas.ticket import (
     TicketCreateSchema, TicketUpdateSchema, TicketTransitionSchema,
     TicketAssignSchema, TicketOutSchema,
     CommentCreateSchema, CommentOutSchema,
 )
+from ..schemas.custom_field import CustomFieldOutSchema
 from ..services import ticket_service
 from ..repositories import ticket_repository as tr
+from ..repositories import custom_field_repository as cfr
 from ..extensions import db
 from ..models.comment import Comment
 
 bp = Blueprint("tickets", __name__)
+
+
+@bp.get("/custom-fields")
+@auth_required
+@permission_required("ticket.read")
+def list_active_custom_fields():
+    """
+    summary:
+        Return the active custom field definitions for the current
+        tenant. Used by the ticket form to render dynamic fields.
+    args:
+        none.
+    return:
+        JSON envelope with a list of CustomFieldOutSchema items.
+    """
+    items = cfr.list_active(g.current_tenant_id)
+    return ok(CustomFieldOutSchema().dump(items, many=True))
 
 
 @bp.get("")
@@ -29,13 +50,32 @@ def list_tickets():
     """
     summary:
         Return a paginated, filtered list of tickets for the current
-        tenant.
+        tenant. Supports both offset (`page=`) and keyset (`cursor=`)
+        pagination; pass `cursor=` to opt into keyset, which scales
+        independently of dataset size.
     args:
         none (filters carried as query string parameters).
     return:
-        Paginated JSON response of TicketOutSchema items.
+        JSON response. Offset mode returns `{data, pagination}`. Cursor
+        mode returns `{data, next_cursor}`.
     """
+    from flask import jsonify
+    from ..schemas.ticket import TicketOutSchema as _TS
     args = request.args
+
+    if "cursor" in args or args.get("paging") == "cursor":
+        items, next_cursor = tr.list_tickets_cursor(
+            tenant_id=g.current_tenant_id,
+            cursor=args.get("cursor") or None,
+            page_size=int(args.get("page_size", 25)),
+            status=args.get("status"),
+            assignee_id=args.get("assignee_id"),
+            queue_id=args.get("queue_id"),
+            requester_id=args.get("requester_id"),
+            q=args.get("q"),
+        )
+        return jsonify({"data": _TS().dump(items, many=True), "next_cursor": next_cursor})
+
     items, total = tr.list_tickets(
         tenant_id=g.current_tenant_id,
         page=int(args.get("page", 1)),
@@ -53,6 +93,8 @@ def list_tickets():
 @bp.post("")
 @auth_required
 @permission_required("ticket.create")
+@rate_limit("ticket_create", limit=60, window_seconds=60)
+@idempotent()
 def create_ticket():
     """
     summary:
@@ -93,7 +135,8 @@ def get_ticket(ticket_id):
 def update_ticket(ticket_id):
     """
     summary:
-        Apply a partial update to a ticket's editable fields.
+        Apply a partial update to a ticket's editable fields. Refreshes
+        the FTS vector when title/description change.
     args:
         ticket_id: id of the ticket to update.
     return:
@@ -103,6 +146,8 @@ def update_ticket(ticket_id):
     t = tr.get_by_id(g.current_tenant_id, ticket_id)
     for k, v in data.items():
         setattr(t, k, v)
+    if "title" in data or "description" in data:
+        tr.update_search_vector(t)
     db.session.commit()
     return ok(TicketOutSchema().dump(t))
 

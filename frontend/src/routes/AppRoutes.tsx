@@ -7,6 +7,7 @@ import { LoginPage } from "../pages/LoginPage";
 import { TicketsPage } from "../pages/TicketsPage";
 import { TicketDetailPage } from "../pages/TicketDetailPage";
 import { NewTicketPage } from "../pages/NewTicketPage";
+import { AdminPage } from "../pages/AdminPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { Layout } from "../components/Layout";
 
@@ -19,6 +20,7 @@ export function AppRoutes() {
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/tickets/new" element={<NewTicketPage />} />
         <Route path="/tickets/:id" element={<TicketDetailPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

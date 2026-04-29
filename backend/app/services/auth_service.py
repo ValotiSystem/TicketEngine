@@ -23,6 +23,11 @@ from ..models.user import User
 from ..models.role import UserRole, Role
 from ..models.permission import RolePermission, Permission
 from ..common.errors import AuthRequired, ValidationError
+from ..common import cache
+
+# Permission cache TTL: short enough that role changes propagate quickly,
+# long enough that a hot endpoint avoids the join cost on every request.
+PERMISSION_CACHE_TTL = 60
 
 
 def authenticate(email: str, password: str, tenant_slug: str) -> User:
@@ -64,19 +69,38 @@ def get_user_permissions(user_id: str) -> set[str]:
     """
     summary:
         Compute the set of effective permission codes for a user.
+        Cached in Redis for PERMISSION_CACHE_TTL seconds; the cache is
+        keyed by user id so a role change requires either waiting for
+        the TTL or calling `invalidate_user_permissions(user_id)`.
     args:
         user_id: id of the user.
     return:
         Set of permission code strings.
     """
-    rows = db.session.execute(
-        select(Permission.code)
-        .join(RolePermission, RolePermission.permission_id == Permission.id)
-        .join(Role, Role.id == RolePermission.role_id)
-        .join(UserRole, UserRole.role_id == Role.id)
-        .where(UserRole.user_id == user_id)
-    ).all()
-    return {r[0] for r in rows}
+    def _compute() -> list[str]:
+        rows = db.session.execute(
+            select(Permission.code)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .join(Role, Role.id == RolePermission.role_id)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(UserRole.user_id == user_id)
+        ).all()
+        return sorted({r[0] for r in rows})
+
+    return set(cache.get_or_set(f"perm:{user_id}", PERMISSION_CACHE_TTL, _compute))
+
+
+def invalidate_user_permissions(user_id: str) -> None:
+    """
+    summary:
+        Drop the cached permission set for a user. Call this after any
+        role assignment change.
+    args:
+        user_id: id of the user whose cache must be cleared.
+    return:
+        None.
+    """
+    cache.invalidate(f"perm:{user_id}")
 
 
 def make_tokens(user: User) -> tuple[str, str]:

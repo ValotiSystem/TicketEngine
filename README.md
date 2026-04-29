@@ -137,11 +137,20 @@ npm run dev
 
 ### Demo credentials (seed only — change before going live)
 
-| Field   | Value             |
-|---------|-------------------|
-| Tenant  | `acme`            |
-| Email   | `admin@acme.test` |
-| Password| `admin123`        |
+The `flask --app wsgi seed` command creates **two tenants** (`acme`,
+`globex`) and one user per role on each. Password is `password` for all
+demo users.
+
+| Tenant   | Email                    | Role        | What they can do |
+|----------|--------------------------|-------------|------------------|
+| `acme`   | `requester@acme.test`    | Requester   | Open tickets, read own tickets |
+| `acme`   | `agent@acme.test`        | Agent       | Triage, assign, transition, internal comments |
+| `acme`   | `supervisor@acme.test`   | Supervisor  | Agent + reopen closed + read audit |
+| `acme`   | `admin@acme.test`        | Admin       | Everything, including `/admin` config |
+| `globex` | `requester@globex.test`  | Requester   | (separate tenant — used to verify isolation) |
+| `globex` | `agent@globex.test`      | Agent       |  |
+| `globex` | `supervisor@globex.test` | Supervisor  |  |
+| `globex` | `admin@globex.test`      | Admin       |  |
 
 ---
 
@@ -152,7 +161,7 @@ All endpoints are versioned under `/api/v1/`.
 ### Auth
 | Method | Path                  | Description |
 |--------|-----------------------|-------------|
-| POST   | `/auth/login`         | Exchange credentials for token pair |
+| POST   | `/auth/login`         | Exchange credentials for token pair (rate-limited) |
 | POST   | `/auth/refresh`       | Issue a new access token |
 | GET    | `/auth/me`            | Current user + permissions |
 | POST   | `/auth/logout`        | Audit-only logout (see notes) |
@@ -160,19 +169,33 @@ All endpoints are versioned under `/api/v1/`.
 ### Tickets
 | Method | Path                              | Description |
 |--------|-----------------------------------|-------------|
-| GET    | `/tickets`                        | List with filters / pagination |
-| POST   | `/tickets`                        | Create |
+| GET    | `/tickets`                        | List with filters; supports `?cursor=` for keyset pagination |
+| POST   | `/tickets`                        | Create (rate-limited; honors `Idempotency-Key`) |
+| GET    | `/tickets/custom-fields`          | Active custom field definitions (form rendering) |
 | GET    | `/tickets/{id}`                   | Detail |
-| PATCH  | `/tickets/{id}`                   | Partial update |
+| PATCH  | `/tickets/{id}`                   | Partial update; refreshes FTS vector |
 | GET    | `/tickets/{id}/comments`          | List comments (internal filtered) |
-| POST   | `/tickets/{id}/comments`         | Add comment |
-| POST   | `/tickets/{id}/assign`           | Change assignee |
-| POST   | `/tickets/{id}/transition`       | Move to a new status |
+| POST   | `/tickets/{id}/comments`          | Add comment |
+| POST   | `/tickets/{id}/assign`            | Change assignee |
+| POST   | `/tickets/{id}/transition`        | Move to a new status |
+
+### Admin (requires `admin.config` permission)
+| Method | Path                              | Description |
+|--------|-----------------------------------|-------------|
+| GET    | `/admin/custom-fields`            | List every custom field definition |
+| POST   | `/admin/custom-fields`            | Create a definition |
+| PATCH  | `/admin/custom-fields/{id}`       | Patch a definition (`key` and `field_type` immutable) |
+| DELETE | `/admin/custom-fields/{id}`       | Soft-delete (deactivate) |
 
 ### Audit
 | Method | Path             | Description |
 |--------|------------------|-------------|
 | GET    | `/audit-events`  | Tenant-scoped audit log with filters |
+
+### Observability
+| Method | Path        | Description |
+|--------|-------------|-------------|
+| GET    | `/metrics`  | Prometheus exposition (scrape from cluster network) |
 
 ### Standard error envelope
 
@@ -254,6 +277,25 @@ Two transitions require a mandatory reason:
 - `* → cancelled` (cancellation reason)
 
 ---
+
+## Scalability
+
+A dedicated playbook lives at [`docs/SCALABILITY.md`](docs/SCALABILITY.md).
+Highlights of what is **already in the scaffold**:
+
+- **Transactional outbox** for reliable event emission (`outbox_events`
+  table drained by celery beat every 2s with `FOR UPDATE SKIP LOCKED`).
+- **Keyset (cursor) pagination** for ticket lists — O(log N + page_size)
+  regardless of dataset size.
+- **Postgres FTS** with weighted tsvector + GIN index, with
+  ILIKE fallback on the SQLite dev path.
+- **Redis-backed primitives** that all **fail-open**: permission cache
+  (60s TTL), token-bucket rate limiter, `Idempotency-Key` middleware.
+- **Read replica routing scaffold** activated by `DATABASE_URL_REPLICA`.
+- **Prometheus `/metrics`** with bounded-cardinality labels (rule pattern,
+  not raw URL).
+- **Compound indexes** on every common ticket query shape, all rooted in
+  `tenant_id` so the system is shard-ready.
 
 ## Known limitations / `CRITIQUE` notes
 

@@ -14,6 +14,24 @@ export type TicketStatus =
 
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
+export type CustomFieldType =
+  | "text" | "longtext" | "number" | "bool" | "date"
+  | "select" | "multiselect" | "url" | "email";
+
+export interface CustomFieldDef {
+  id: string;
+  key: string;
+  label: string;
+  field_type: CustomFieldType;
+  is_required: boolean;
+  is_active: boolean;
+  display_order: number;
+  config: Record<string, unknown>;
+  help_text: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Ticket {
   id: string;
   number: number;

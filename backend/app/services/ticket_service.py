@@ -6,8 +6,9 @@ summary:
     significant operation:
     - runs in a transaction
     - emits an audit event
-    - enqueues async jobs for notifications (does NOT block the HTTP
-      response)
+    - emits an outbox event in the SAME transaction (drained async by
+      celery beat -> tasks.outbox_drain). This eliminates the
+      "DB committed, broker enqueue lost" failure mode.
 """
 from __future__ import annotations
 
@@ -20,9 +21,9 @@ from ..models.ticket import Ticket
 from ..models.comment import Comment
 from ..models.user import User
 from ..repositories import ticket_repository as tr
+from ..repositories import custom_field_repository as cfr
 from ..common.errors import ValidationError, NotFound, Forbidden
-from . import workflow, audit_service
-from ..tasks.notifications import notify_event
+from . import workflow, audit_service, outbox, custom_field_service as cfs
 
 
 def create_ticket(
@@ -39,8 +40,9 @@ def create_ticket(
     """
     summary:
         Create a new ticket in `open` status. Allocates a tenant-scoped
-        readable number, writes an audit event and enqueues a creation
-        notification.
+        readable number, validates custom field values against the
+        tenant's active definitions, writes an audit event, populates
+        the FTS vector and stages an outbox event for async fan-out.
     args:
         tenant_id: tenant scope.
         actor_id: id of the user creating (and requesting) the ticket.
@@ -60,6 +62,10 @@ def create_ticket(
     if priority not in ("low", "normal", "high", "urgent"):
         raise ValidationError("Invalid priority", field="priority")
 
+    # Validate custom field values against active definitions for the tenant.
+    defs = cfr.list_active(tenant_id)
+    cleaned_custom = cfs.validate_values(defs, custom_fields or {})
+
     number = tr.next_ticket_number(tenant_id)
 
     ticket = Ticket(
@@ -72,11 +78,13 @@ def create_ticket(
         requester_id=actor_id,
         category_id=category_id,
         queue_id=queue_id,
-        custom_fields=custom_fields or {},
+        custom_fields=cleaned_custom,
         source="web",
     )
     db.session.add(ticket)
-    db.session.flush()  # needed so the audit event can reference ticket.id
+    db.session.flush()  # so audit / outbox can reference ticket.id
+
+    tr.update_search_vector(ticket)
 
     audit_service.record(
         tenant_id=tenant_id,
@@ -85,15 +93,13 @@ def create_ticket(
         event_type="ticket.created",
         payload={"number": number, "title": ticket.title, "priority": priority},
     )
+    outbox.enqueue(
+        tenant_id=tenant_id,
+        event_type="ticket.created",
+        payload={"ticket_id": ticket.id, "number": number, "actor_id": actor_id},
+    )
 
     db.session.commit()
-
-    # CRITIQUE: enqueue happens after commit. If the broker is down the
-    # notification is lost. Robust solution: outbox pattern (write a row
-    # to an `outbox_events` table inside the same transaction, then a
-    # worker drains via polling/LISTEN). The scaffold uses direct enqueue.
-    notify_event.delay("ticket.created", ticket.id)
-
     return ticket
 
 
@@ -138,7 +144,6 @@ def add_comment(
     )
     db.session.add(c)
 
-    # touch the ticket for denormalized fields
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     if is_internal:
@@ -153,12 +158,14 @@ def add_comment(
         event_type="ticket.commented",
         payload={"is_internal": is_internal},
     )
+    if not is_internal:
+        outbox.enqueue(
+            tenant_id=tenant_id,
+            event_type="ticket.commented",
+            payload={"ticket_id": ticket.id, "actor_id": actor_id},
+        )
 
     db.session.commit()
-
-    if not is_internal:
-        notify_event.delay("ticket.commented", ticket.id)
-
     return c
 
 
@@ -183,7 +190,6 @@ def assign(
     ticket = tr.get_by_id(tenant_id, ticket_id)
 
     if assignee_id:
-        # tenant guarantee: cannot assign to a user from another tenant
         u = db.session.execute(
             select(User).where(User.id == assignee_id, User.tenant_id == tenant_id)
         ).scalar_one_or_none()
@@ -200,8 +206,12 @@ def assign(
         event_type="ticket.assigned",
         payload={"from": prev, "to": assignee_id},
     )
+    outbox.enqueue(
+        tenant_id=tenant_id,
+        event_type="ticket.assigned",
+        payload={"ticket_id": ticket.id, "from": prev, "to": assignee_id},
+    )
     db.session.commit()
-    notify_event.delay("ticket.assigned", ticket.id)
     return ticket
 
 
@@ -230,8 +240,6 @@ def transition(
     """
     ticket = tr.get_by_id(tenant_id, ticket_id)
 
-    # Permission gate: a few transitions require dedicated permissions.
-    # workflow.py is "pure" (no permission knowledge); the gate lives here.
     if to_status == "reopened" and ticket.status == "closed":
         if "ticket.reopen_closed" not in actor_permissions:
             raise Forbidden("ticket.reopen_closed permission required")
@@ -248,12 +256,12 @@ def transition(
         event_type="ticket.transition",
         payload={"from": prev, "to": new, "reason": reason},
     )
-
-    db.session.commit()
-
-    notify_event.delay(
-        f"ticket.{new}" if new in ("resolved", "closed", "reopened", "cancelled") else "ticket.updated",
-        ticket.id,
+    event_name = f"ticket.{new}" if new in ("resolved", "closed", "reopened", "cancelled") else "ticket.updated"
+    outbox.enqueue(
+        tenant_id=tenant_id,
+        event_type=event_name,
+        payload={"ticket_id": ticket.id, "from": prev, "to": new, "actor_id": actor_id},
     )
 
+    db.session.commit()
     return ticket

@@ -15,3 +15,5 @@ from .comment import Comment  # noqa: F401
 from .attachment import Attachment  # noqa: F401
 from .audit import AuditEvent  # noqa: F401
 from .tag import Tag, TicketTag  # noqa: F401
+from .custom_field import CustomFieldDefinition  # noqa: F401
+from .outbox import OutboxEvent  # noqa: F401

@@ -12,6 +12,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 from ..common.responses import ok
 from ..common.decorators import auth_required
+from ..common.rate_limit import rate_limit
 from ..schemas.auth import LoginSchema, MeSchema
 from ..services import auth_service, audit_service
 
@@ -19,6 +20,7 @@ bp = Blueprint("auth", __name__)
 
 
 @bp.post("/login")
+@rate_limit("login", limit=10, window_seconds=60)
 def login():
     """
     summary:
